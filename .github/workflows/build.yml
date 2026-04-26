@@ -13,7 +13,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -146,41 +146,44 @@ jobs:
       run: |
         python3 << 'PYEOF'
         import os
-
+        
         def fix_xml_file(filepath):
             with open(filepath, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-
+            
             start_idx = 0
             for i, line in enumerate(lines):
                 if '<?xml' in line:
                     start_idx = i
                     break
-
+            
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.writelines(lines[start_idx:])
-
+            
             print(f"Fixed: {filepath}")
-
+        
         for root, dirs, files in os.walk('app/src/main/res'):
             for file in files:
                 if file.endswith('.xml'):
                     fix_xml_file(os.path.join(root, file))
-
+        
         print("All XML files fixed!")
         PYEOF
 
-    - name: Create basic resource files if missing
+    - name: Create strings.xml with all required strings
       run: |
-        if [ ! -f "app/src/main/res/values/strings.xml" ]; then
-          cat > app/src/main/res/values/strings.xml << 'EOF'
+        cat > app/src/main/res/values/strings.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
             <string name="app_name">NFCman</string>
+            <string name="service_description">NFCman HCE Service</string>
+            <string name="payment_cards">Payment Cards</string>
+            <string name="access_cards">Access Cards</string>
         </resources>
         EOF
-        fi
 
+    - name: Create colors.xml if missing
+      run: |
         if [ ! -f "app/src/main/res/values/colors.xml" ]; then
           cat > app/src/main/res/values/colors.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
@@ -196,6 +199,8 @@ jobs:
         EOF
         fi
 
+    - name: Create themes.xml if missing
+      run: |
         if [ ! -f "app/src/main/res/values/themes.xml" ]; then
           cat > app/src/main/res/values/themes.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
@@ -216,19 +221,21 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y imagemagick
-
+        
         sizes=("mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192")
         for size_pair in "${sizes[@]}"; do
           IFS=':' read -r density size <<< "$size_pair"
           dir="app/src/main/res/mipmap-$density"
           mkdir -p "$dir"
-
-          convert -size ${size}x${size} xc:transparent             -fill '#2196F3' -draw "circle $((size/2)),$((size/2)) $((size/2)),$((size/4))"             "$dir/ic_launcher.png"
-
+          
+          convert -size ${size}x${size} xc:transparent \
+            -fill '#2196F3' -draw "circle $((size/2)),$((size/2)) $((size/2)),$((size/4))" \
+            "$dir/ic_launcher.png"
+          
           cp "$dir/ic_launcher.png" "$dir/ic_launcher_foreground.png"
           convert -size ${size}x${size} xc:'#2196F3' "$dir/ic_launcher_background.png"
         done
-
+        
         echo "Icons created successfully"
 
     - name: Build with Gradle
@@ -254,3 +261,4 @@ jobs:
         path: |
           app/build/outputs/apk/**/*.apk
           app/build/outputs/apk/**/*.aab
+          
