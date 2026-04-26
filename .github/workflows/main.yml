@@ -32,17 +32,20 @@ jobs:
         sdkmanager "platforms;android-34"
         sdkmanager "build-tools;34.0.0"
 
-    - name: Create Gradle project structure
+    - name: Create complete Gradle project from scratch
       run: |
-        mkdir -p app/src/main/java/com/nfcclone
+        mkdir -p app/src/main/java/com/nfcclone/app
         mkdir -p app/src/main/res/values
         mkdir -p app/src/main/res/layout
         mkdir -p app/src/main/res/xml
+        mkdir -p app/src/main/res/drawable
         mkdir -p app/src/main/res/mipmap-mdpi
         mkdir -p app/src/main/res/mipmap-hdpi
         mkdir -p app/src/main/res/mipmap-xhdpi
         mkdir -p app/src/main/res/mipmap-xxhdpi
         mkdir -p app/src/main/res/mipmap-xxxhdpi
+        mkdir -p app/src/test/java
+        mkdir -p app/src/androidTest/java
 
     - name: Create settings.gradle
       run: |
@@ -65,12 +68,10 @@ jobs:
         include ':app'
         EOF
 
-    - name: Create build.gradle (root)
+    - name: Create root build.gradle
       run: |
         cat > build.gradle << 'EOF'
-        plugins {
-            id 'com.android.application' version '8.2.2' apply false
-        }
+        // Top-level build file
         EOF
 
     - name: Create gradle.properties
@@ -80,7 +81,6 @@ jobs:
         android.useAndroidX=true
         kotlin.code.style=official
         android.nonTransitiveRClass=true
-        android.suppressUnsupportedCompileSdk=34
         EOF
 
     - name: Create app/build.gradle
@@ -125,71 +125,124 @@ jobs:
         }
         EOF
 
-    - name: List android directory contents
+    - name: Create proguard-rules.pro
       run: |
-        echo "=== android/ directory ==="
-        ls -la android/
-        echo "=== android/src ==="
-        find android/src -type f | head -20
-        echo "=== android/res ==="
-        find android/res -type f | head -20
+        cat > app/proguard-rules.pro << 'EOF'
+        # ProGuard rules
+        EOF
+
+    - name: Check what files exist in android/
+      run: |
+        echo "=== Contents of android/ directory ==="
+        find android -type f | sort
+        echo ""
+        echo "=== AndroidManifest.xml ==="
+        cat android/AndroidManifest.xml || echo "NOT FOUND"
 
     - name: Copy NFCman source files
       run: |
-        cp -r android/src/com/nfcclone/app app/src/main/java/com/nfcclone/
-        cp -r android/res/* app/src/main/res/ || true
-        cp android/AndroidManifest.xml app/src/main/
+        if [ -d "android/src/com/nfcclone/app" ]; then
+          cp -r android/src/com/nfcclone/app/* app/src/main/java/com/nfcclone/app/
+        fi
+        
+        if [ -d "android/res" ]; then
+          cp -r android/res/* app/src/main/res/ || true
+        fi
+        
+        if [ -f "android/AndroidManifest.xml" ]; then
+          cp android/AndroidManifest.xml app/src/main/
+        fi
 
-    - name: Create proguard-rules.pro
+    - name: Create basic resource files if missing
       run: |
-        touch app/proguard-rules.pro
-
-    - name: Create basic strings.xml if missing
-      run: |
-        if [ ! -f app/src/main/res/values/strings.xml ]; then
+        if [ ! -f "app/src/main/res/values/strings.xml" ]; then
           cat > app/src/main/res/values/strings.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
         <resources>
             <string name="app_name">NFCman</string>
         </resources>
         EOF
         fi
+        
+        if [ ! -f "app/src/main/res/values/colors.xml" ]; then
+          cat > app/src/main/res/values/colors.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <color name="purple_200">#FFBB86FC</color>
+            <color name="purple_500">#FF6200EE</color>
+            <color name="purple_700">#FF3700B3</color>
+            <color name="teal_200">#FF03DAC5</color>
+            <color name="teal_700">#FF018786</color>
+            <color name="black">#FF000000</color>
+            <color name="white">#FFFFFFFF</color>
+        </resources>
+        EOF
+        fi
+        
+        if [ ! -f "app/src/main/res/values/themes.xml" ]; then
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <style name="Theme.NFCman" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+                <item name="colorPrimary">@color/purple_500</item>
+                <item name="colorPrimaryVariant">@color/purple_700</item>
+                <item name="colorOnPrimary">@color/white</item>
+                <item name="colorSecondary">@color/teal_200</item>
+                <item name="colorSecondaryVariant">@color/teal_700</item>
+                <item name="colorOnSecondary">@color/black</item>
+            </style>
+        </resources>
+        EOF
+        fi
 
-    - name: Create simple launcher icon
+    - name: Install ImageMagick and create launcher icons
       run: |
-        python3 -c "
-        from PIL import Image, ImageDraw
-        import os
-        sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
-        for density, size in sizes.items():
-            img = Image.new('RGBA', (size, size), (33, 150, 243, 255))
-            draw = ImageDraw.Draw(img)
-            draw.ellipse([size//4, size//4, size*3//4, size*3//4], fill=(255, 255, 255, 255))
-            path = f'app/src/main/res/mipmap-{density}/ic_launcher.png'
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            img.save(path)
-            img.save(f'app/src/main/res/mipmap-{density}/ic_launcher_foreground.png')
-            img_bg = Image.new('RGBA', (size, size), (33, 150, 243, 255))
-            img_bg.save(f'app/src/main/res/mipmap-{density}/ic_launcher_background.png')
-        "
+        sudo apt-get update
+        sudo apt-get install -y imagemagick
+        
+        sizes=("mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192")
+        for size_pair in "${sizes[@]}"; do
+          IFS=':' read -r density size <<< "$size_pair"
+          dir="app/src/main/res/mipmap-$density"
+          mkdir -p "$dir"
+          
+          convert -size ${size}x${size} xc:transparent \
+            -fill '#2196F3' -draw "circle $((size/2)),$((size/2)) $((size/2)),$((size/4))" \
+            "$dir/ic_launcher.png"
+          
+          cp "$dir/ic_launcher.png" "$dir/ic_launcher_foreground.png"
+          convert -size ${size}x${size} xc:'#2196F3' "$dir/ic_launcher_background.png"
+        done
+        
+        echo "Icons created successfully"
 
     - name: Verify project structure
       run: |
-        echo "=== Project structure ==="
-        find . -type f | grep -E '\.(gradle|xml|java|png)$' | sort
+        echo "=== Java files ==="
+        find app/src -name "*.java" | sort
+        echo ""
+        echo "=== XML files ==="
+        find app/src -name "*.xml" | sort
+        echo ""
         echo "=== AndroidManifest.xml ==="
         cat app/src/main/AndroidManifest.xml
 
     - name: Build with Gradle
       run: |
         gradle wrapper --gradle-version 8.5
-        ./gradlew assembleDebug --stacktrace
+        ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
 
-    - name: Upload APK
+    - name: Upload build log
       if: always()
       uses: actions/upload-artifact@v4
       with:
+        name: build-log
+        path: build.log
+
+    - name: Upload APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
         name: NFCman-APK
-        path: |
-          app/build/outputs/apk/debug/app-debug.apk
-          app/build/reports/
-          
+        path: app/build/outputs/apk/debug/app-debug.apk
+        
