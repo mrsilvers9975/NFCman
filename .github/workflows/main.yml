@@ -56,6 +56,9 @@ jobs:
                 mavenCentral()
                 gradlePluginPortal()
             }
+            plugins {
+                id 'com.android.application' version '8.2.2'
+            }
         }
         dependencyResolutionManagement {
             repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
@@ -71,7 +74,9 @@ jobs:
     - name: Create root build.gradle
       run: |
         cat > build.gradle << 'EOF'
-        // Top-level build file
+        plugins {
+            id 'com.android.application' version '8.2.2' apply false
+        }
         EOF
 
     - name: Create gradle.properties
@@ -245,4 +250,3 @@ jobs:
       with:
         name: NFCman-APK
         path: app/build/outputs/apk/debug/app-debug.apk
-        
