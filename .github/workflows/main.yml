@@ -1,0 +1,168 @@
+name: Build NFCman APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install platform and build tools
+      run: |
+        sdkmanager "platforms;android-34"
+        sdkmanager "build-tools;34.0.0"
+
+    - name: Create Gradle project structure
+      run: |
+        mkdir -p app/src/main/java/com/nfcclone
+        mkdir -p app/src/main/res/values
+        mkdir -p app/src/main/res/layout
+        mkdir -p app/src/main/res/xml
+        mkdir -p app/src/main/res/mipmap-mdpi
+        mkdir -p app/src/main/res/mipmap-hdpi
+        mkdir -p app/src/main/res/mipmap-xhdpi
+        mkdir -p app/src/main/res/mipmap-xxhdpi
+        mkdir -p app/src/main/res/mipmap-xxxhdpi
+
+    - name: Create settings.gradle
+      run: |
+        cat > settings.gradle << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "NFCman"
+        include ':app'
+        EOF
+
+    - name: Create build.gradle (root)
+      run: |
+        cat > build.gradle << 'EOF'
+        plugins {
+            id 'com.android.application' version '8.2.2' apply false
+        }
+        EOF
+
+    - name: Create gradle.properties
+      run: |
+        cat > gradle.properties << 'EOF'
+        org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
+        android.useAndroidX=true
+        kotlin.code.style=official
+        android.nonTransitiveRClass=true
+        EOF
+
+    - name: Create app/build.gradle
+      run: |
+        cat > app/build.gradle << 'EOF'
+        plugins {
+            id 'com.android.application'
+        }
+
+        android {
+            namespace 'com.nfcclone.app'
+            compileSdk 34
+
+            defaultConfig {
+                applicationId "com.nfcclone.app"
+                minSdk 21
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+
+            buildTypes {
+                release {
+                    minifyEnabled false
+                    proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+        }
+
+        dependencies {
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+            implementation 'com.google.android.material:material:1.11.0'
+            implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+        }
+        EOF
+
+    - name: Copy NFCman source files
+      run: |
+        cp -r android/src/com/nfcclone/app app/src/main/java/com/nfcclone/
+        cp -r android/res/* app/src/main/res/ || true
+        cp android/AndroidManifest.xml app/src/main/
+
+    - name: Create proguard-rules.pro
+      run: |
+        touch app/proguard-rules.pro
+
+    - name: Create basic strings.xml if missing
+      run: |
+        if [ ! -f app/src/main/res/values/strings.xml ]; then
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+        <resources>
+            <string name="app_name">NFCman</string>
+        </resources>
+        EOF
+        fi
+
+    - name: Create simple launcher icon
+      run: |
+        python3 -c "
+        from PIL import Image, ImageDraw
+        import os
+        sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+        for density, size in sizes.items():
+            img = Image.new('RGBA', (size, size), (33, 150, 243, 255))
+            draw = ImageDraw.Draw(img)
+            draw.ellipse([size//4, size//4, size*3//4, size*3//4], fill=(255, 255, 255, 255))
+            path = f'app/src/main/res/mipmap-{density}/ic_launcher.png'
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            img.save(path)
+            img.save(f'app/src/main/res/mipmap-{density}/ic_launcher_foreground.png')
+            img_bg = Image.new('RGBA', (size, size), (33, 150, 243, 255))
+            img_bg.save(f'app/src/main/res/mipmap-{density}/ic_launcher_background.png')
+        "
+
+    - name: Make gradlew executable and build
+      run: |
+        gradle wrapper --gradle-version 8.5
+        ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: NFCman-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
+        
